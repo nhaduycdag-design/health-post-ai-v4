@@ -23,3 +23,9 @@ Một chủ đề sức khỏe với hai bài viết Facebook/TikTok, hai lịch
 
 ## Quy tắc an toàn nội dung
 Luôn kiểm tra nguồn đáng tin cậy, ngày kiểm chứng và các giới hạn của khuyến nghị trước khi duyệt. Không coi bản nháp tự động là lời khuyên y tế đã xác minh.
+
+## Nhập bài từ CSV do ChatGPT tạo
+- Nhấn **Tải CSV mẫu** để lấy định dạng V4. Các cột: `topic_title,category,facts,sources,checked_at,fb_title,fb_body,fb_publish_at,tt_title,tt_body,tt_publish_at`. Ngày giờ dạng `YYYY-MM-DD HH:MM`.
+- Nhấn **Nhập bài từ CSV** để bổ sung bài, không xóa các chủ đề đang có. Mỗi dòng tạo một chủ đề với hai phiên bản; trạng thái mặc định **Chờ duyệt**.
+- V4 cũng nhận CSV cũ của V3 với 4 cột `publish_at,topic,title,body`. Nội dung được nhập vào **Facebook**, phần TikTok để trống để biên tập sau.
+- Nội dung CSV không được tự động xác minh. Cần bổ sung nguồn tham khảo và ngày kiểm chứng trước khi duyệt.
