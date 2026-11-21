@@ -9,4 +9,4 @@ window.HEALTH_POST_V4_FIREBASE_CONFIG = {
   appId: "1:284316146434:web:8ff7ea55367f485dac801b"
 };;
 // OAuth 2.0 Client ID (Web application), not Client Secret.
-window.HEALTH_POST_V4_CALENDAR_CLIENT_ID = '';
+window.HEALTH_POST_V4_CALENDAR_CLIENT_ID = '284316146434-cnvnsj8ij6g8f5c2o1ahr8ij0m6ame19.apps.googleusercontent.com';
