@@ -7,3 +7,11 @@
 
 /* V4.3 post previews */
 .post-preview{margin-top:14px;padding:12px;border:1px solid #cbdcd4;border-radius:12px;min-width:0}.post-preview h4{margin:0 0 8px}.post-preview .preview-text{white-space:pre-wrap;overflow-wrap:anywhere;font-weight:400}.fb-preview{background:white;color:#1c1e21;border:1px solid #dddfe2;border-radius:10px;padding:14px;margin:12px auto;width:100%;box-sizing:border-box}.fb-preview.mobile{max-width:360px}.fb-preview small{display:block;color:#65676b;margin:4px 0 12px}.fb-preview .preview-text{font-size:15px;line-height:1.5}.fb-preview-footer{border-top:1px solid #dddfe2;margin-top:14px;padding-top:10px;color:#65676b;text-align:center;font-size:13px}.tt-preview{background:#172c29;color:white;width:100%;max-width:300px;aspect-ratio:9/16;box-sizing:border-box;margin:12px auto;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px;overflow:hidden}.tt-preview-top,.tt-preview-bottom{font-size:12px;text-align:center;flex:none}.tt-preview .preview-text{font-size:20px;line-height:1.35;text-align:center;font-weight:600;flex:1;min-height:0;overflow:auto;align-content:safe center}.platform{min-width:0}
+
+/* V4.6: keep text readable in the white CSV update panel inside header. */
+#csvUpdatePanel{color:#17352f}
+#csvUpdatePanel h2,#csvUpdatePanel label,#csvUpdatePanel pre{color:#17352f}
+#csvUpdatePanel .hint{color:#526b60;display:block;margin:8px 0 12px}
+#csvUpdatePanel label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}
+#csvUpdatePanel input[type=checkbox]{margin:0;flex:none}
+#csvUpdatePanel pre:empty{display:none}
