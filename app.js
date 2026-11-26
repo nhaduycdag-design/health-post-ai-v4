@@ -55,6 +55,68 @@ function csvDownload(){const cols=['topic_title','category','facts','sources','c
 function csvDate(raw){const v=String(raw||'').trim().replace(' ','T');if(!v)return '';if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))throw Error('Ngày giờ sai định dạng: '+raw);const d=new Date(v);if(!Number.isFinite(d.getTime())||dateTime(d)!==v)throw Error('Ngày giờ không hợp lệ: '+raw);return v}
 function fromCSVRow(r,legacy){const t=newTopic();if(legacy){t.title=r.title||'';t.category=['Dinh dưỡng','Thói quen sống khỏe','Giấc ngủ','Vận động','Khác'].includes(r.topic)?r.topic:'Khác';t.fb.title=r.title||'';t.fb.body=r.body||'';t.fb.at=csvDate(r.publish_at)}else{t.title=r.topic_title||'';t.category=['Dinh dưỡng','Thói quen sống khỏe','Giấc ngủ','Vận động','Khác'].includes(r.category)?r.category:'Khác';t.facts=r.facts||'';t.sources=r.sources||'';t.checkedAt=r.checked_at||'';t.fb.title=r.fb_title||t.title;t.fb.body=r.fb_body||'';t.fb.at=csvDate(r.fb_publish_at);t.tt.title=r.tt_title||t.title;t.tt.body=r.tt_body||'';t.tt.at=csvDate(r.tt_publish_at)}if(!t.title.trim()||(!t.fb.body.trim()&&!t.tt.body.trim()))throw Error('Thiếu chủ đề hoặc nội dung');if(t.title.length>160||t.fb.body.length>12000||t.tt.body.length>12000)throw Error('Nội dung vượt giới hạn');if(t.checkedAt&&!/^\d{4}-\d{2}-\d{2}$/.test(t.checkedAt))throw Error('Ngày kiểm chứng sai định dạng');return t}
 async function importCSV(file){if(file.size>2e6)throw Error('CSV quá 2MB');const rows=parseCSV(await file.text());if(!rows.length)throw Error('CSV trống');const head=rows.shift().map(x=>x.trim().toLowerCase());const legacy=['publish_at','topic','title','body'].every(x=>head.includes(x));const modern=['topic_title','fb_body','tt_body'].every(x=>head.includes(x));if(!legacy&&!modern)throw Error('CSV thiếu cột. Hãy tải file CSV mẫu V4 hoặc dùng CSV V3');let added=[],skipped=0,issues=[];const signatures=new Set(topics.map(t=>[t.title.trim().toLocaleLowerCase('vi'),t.fb.body.trim(),t.tt.body.trim()].join('|')));for(let i=0;i<rows.length;i++){if(!rows[i].some(x=>x.trim()))continue;if(topics.length+added.length>=MAX){skipped++;issues.push('Đã đạt giới hạn 1000 chủ đề');continue}try{const r=Object.fromEntries(head.map((h,j)=>[h,(rows[i][j]||'').trim()]));const t=fromCSVRow(r,legacy);const sig=[t.title.trim().toLocaleLowerCase('vi'),t.fb.body.trim(),t.tt.body.trim()].join('|');if(signatures.has(sig)){skipped++;continue}signatures.add(sig);added.push(t)}catch(e){skipped++;if(issues.length<3)issues.push('Dòng '+(i+2)+': '+e.message)}}if(!added.length){toast('Không có bài mới. Bỏ qua '+skipped+' dòng. '+issues.join('; '));return}if(!confirm('Nhập '+added.length+' chủ đề ('+(legacy?'CSV V3 – chỉ có Facebook':'CSV V4 – Facebook và TikTok')+')? Tất cả bài mới ở trạng thái Chờ duyệt.'))return;topics.push(...added.map(t=>({...t,_dirty:true})));try{await persist();toast('Đã nhập '+added.length+' chủ đề, bỏ qua '+skipped+' dòng. '+issues.join('; '))}catch(e){toast('Lỗi lưu CSV: '+e.message)}}
+function csvUpdatePlan(text, keys, cutoff, data){
+ const rows=parseCSV(text), head=(rows.shift()||[]).map(x=>x.trim().toLowerCase());
+ if(new Set(head).size!==head.length||!head.includes('topic_title')||keys.some(k=>!head.includes(k+'_body')||!head.includes(k+'_publish_at')))throw Error('CSV thiếu cột hoặc trùng tên cột');
+ const norm=s=>String(s||'').trim().normalize('NFC').toLocaleLowerCase('vi');
+ const result=[], seen=new Map(), notes=[];
+ for(const [i,row] of rows.entries()){
+  if(!row.some(x=>x.trim()))continue;
+  const r=Object.fromEntries(head.map((h,j)=>[h,(row[j]||'').trim()]));
+  for(const k of keys){
+   const label='Dòng '+(i+2)+' · '+k.toUpperCase();
+   try{
+    if(row.length!==head.length)throw Error('Sai số cột');
+    const at=csvDate(r[k+'_publish_at']), body=r[k+'_body'];
+    if(!at||!r.topic_title||!body||body.length>12000)throw Error('Thiếu hoặc sai nội dung/lịch');
+    const matches=data.filter(t=>norm(t.title)===norm(r.topic_title)&&t[k]?.at===at);
+    if(matches.length!==1)throw Error(matches.length?'Trùng chủ đề':'Không tìm thấy');
+    const t=matches[0], p=t[k], key=t.id+'|'+k;
+    if(seen.has(key)){seen.get(key).duplicate=true;throw Error('Trùng dòng CSV');}
+    const item={id:t.id,k,title:t.title,at,old:p.body,body};seen.set(key,item);
+    if(p.status!=='pending'||p.calendarId||at.slice(0,10)<cutoff){notes.push(label+': Được bảo vệ');continue;}
+    if(p.body===body){notes.push(label+': Không đổi');continue;}
+    result.push(item);
+   }catch(e){notes.push(label+': '+e.message);}
+  }
+ }
+ return {items:result.filter(x=>!x.duplicate),notes:[...notes,...result.filter(x=>x.duplicate).map(x=>x.title+': Bỏ qua dòng trùng')]};
+}
+async function updateCSV(file){
+ if(busy||mode==='cloud'&&!cloudEnabled())return toast('Chờ tải dữ liệu hoặc đăng nhập');
+ if(file.size>2e6)throw Error('CSV quá 2MB');
+ const keys=['fb','tt'].filter(k=>$('csvUpdate'+k).checked), cutoff=$('csvCutoff').value;
+ if(!keys.length||!cutoff)throw Error('Chọn nền tảng và ngày bắt đầu');
+ const account=authUser?.uid, originalMode=mode;
+ const plan=csvUpdatePlan(await file.text(),keys,cutoff,topics);
+ const box=$('csvReport');box.textContent='Sẽ cập nhật '+plan.items.length+' bài; bỏ qua '+plan.notes.length+' mục.\n'+plan.items.map(x=>x.k.toUpperCase()+' · '+x.at+' · '+x.title).concat(plan.notes).join('\n');
+ if(!plan.items.length)return;
+ if(!confirm('Cập nhật '+plan.items.length+' bài chờ duyệt? Giữ nguyên lịch, tiêu đề, nguồn và trạng thái. Các chỉnh sửa chưa lưu trong trình soạn có thể cần mở lại.'))return;
+ busy=true;let done=0, skipped=0;
+ const eligible=(t,x)=>t&&t.title===x.title&&t[x.k]?.at===x.at&&t[x.k].status==='pending'&&!t[x.k].calendarId&&t[x.k].body===x.old;
+ try{
+  if(mode!==originalMode||authUser?.uid!==account)throw Error('Tài khoản đã thay đổi');
+  if(originalMode==='cloud'){
+   for(const x of plan.items){
+    if(mode!==originalMode||authUser?.uid!==account)throw Error('Tài khoản đã thay đổi');
+    const ref=cloud.doc(cloud.db,'v4_users',account,'topics',x.id);
+    const ok=await cloud.runTransaction(cloud.db,async tx=>{const snap=await tx.get(ref);if(!eligible(snap.data(),x))return false;tx.update(ref,{[x.k+'.body']:x.body,updatedAt:new Date().toISOString()});return true;});
+    if(ok)done++;else skipped++;
+   }
+  }else{
+   const next=JSON.parse(JSON.stringify(topics));
+   for(const x of plan.items){const t=next.find(t=>t.id===x.id);if(!eligible(t,x)){skipped++;continue;}t[x.k].body=x.body;t.updatedAt=new Date().toISOString();done++;}
+   localStorage.setItem(KEY,JSON.stringify(next));topics=next;
+  }
+  box.textContent='Đã cập nhật '+done+' bài; bỏ qua thêm '+skipped+' bài thay đổi sau xem trước.\n'+box.textContent;
+  toast('Đã cập nhật '+done+' bài');
+ }catch(e){box.textContent='Lỗi: '+e.message+'; số bài đã xác nhận lưu: '+(originalMode==='cloud'?done:0)+'\n'+box.textContent;throw e;}
+ finally{busy=false;render();}
+}
+$('csvUpdateBtn').onclick=()=>{$('csvUpdatePanel').hidden=!$('csvUpdatePanel').hidden;};
+$('csvUpdateChoose').onclick=()=>{if(!busy)$('csvUpdateFile').click();};
+$('csvUpdateFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(f)try{await updateCSV(f)}catch(err){toast(err.message)}};
+
 $('csvSampleBtn').onclick=csvDownload;$('csvImportBtn').onclick=()=>$('csvImportFile').click();$('csvImportFile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{await importCSV(file)}catch(err){toast('Lỗi nhập CSV: '+err.message)}};
 $('topicForm').addEventListener('submit',e=>{e.preventDefault();saveFromUI()});$('saveAllBtn').onclick=()=>saveFromUI();$('newBtn').onclick=()=>{reset();showTab('editor')};$('draftBtn').onclick=makeOutline;$('search').oninput=renderList;$('fbCopy').onclick=()=>copyPlatform('fb');$('ttCopy').onclick=()=>copyPlatform('tt');$('fbOpen').onclick=()=>window.open('https://www.facebook.com/','_blank','noopener,noreferrer');$('ttOpen').onclick=()=>window.open('https://www.tiktok.com/','_blank','noopener,noreferrer');$('prevWeek').onclick=()=>{weekStart=plusDays(weekStart,-7);renderWeek()};$('nextWeek').onclick=()=>{weekStart=plusDays(weekStart,7);renderWeek()};$('deleteBtn').onclick=async()=>{if(mode==='cloud'&&!cloudEnabled())return toast('Hãy đăng nhập');if(!selected)return toast('Chưa chọn chủ đề');if(!confirm('Xóa chủ đề và cả hai phiên bản?'))return;const id=selected;try{if(cloudEnabled())await cloud.deleteDoc(cloud.doc(cloud.db,'v4_users',authUser.uid,'topics',id));topics=topics.filter(t=>t.id!==id);reset();if(mode==='local')persist();else render();toast('Đã xóa chủ đề V4. Lưu ý: sự kiện Calendar đã tạo cần xóa trong Google Calendar nếu không còn dùng.')}catch(e){toast('Không xóa được: '+e.message)}};$('backupBtn').onclick=()=>download('health-post-ai-v4-backup-'+dateStr(new Date())+'.json',JSON.stringify({version:4,exportedAt:new Date().toISOString(),topics},null,2));$('importBtn').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;if(file.size>3e6)return toast('File quá lớn');try{const data=JSON.parse(await file.text());if(data.version!==4||!Array.isArray(data.topics)||data.topics.length>MAX||!data.topics.every(valid))throw Error('File sao lưu V4 không hợp lệ');if(!confirm('Nhập dữ liệu V4? Dữ liệu V4 hiện tại sẽ bị thay thế.'))return;if(mode==='cloud'){toast('Chỉ nhập JSON khi đang ở chế độ thiết bị; hãy đăng xuất V4 trước.');return}topics=data.topics;selected=null;reset();persist();toast('Đã nhập bản sao lưu V4')}catch(err){toast(err.message)}};reset();render();initFirebase();
 
