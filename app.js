@@ -290,5 +290,53 @@ function brandPatch(t,r,k){
 }
 let brandPlan=null;
 $('brandImport').onclick=()=>{if(!busy)$('brandFile').click()};
-$('brandFile').onchange=async()=>{const f=$('brandFile').files[0];$('brandFile').value='';brandPlan=null;$('brandApply').hidden=true;if(!f||busy)return;try{if(f.size>2e6)throw Error('CSV quá 2MB');const m=mode,uid=authUser?.uid;if(m==='cloud'&&!cloudEnabled())throw Error('Chưa tải dữ liệu cloud');const rows=parseCSV(await f.text()),head=(rows.shift()||[]).map(x=>x.trim());if(mode!==m||authUser?.uid!==uid)throw Error('Tài khoản đã thay đổi');const required=['topic_id','topic_title','fb_publish_at','tt_publish_at','facebook_hashtags','tiktok_title','tiktok_hashtags'];if(!required.every(x=>head.includes(x)))throw Error('Chọn CSV cập nhật V4.7.1');const seen=new Set(),items=[];let skipped=0;for(const row of rows){if(!row.some(Boolean))continue;const r=Object.fromEntries(head.map((h,i)=>[h,row[i]||'']));if(seen.has(r.topic_id))throw Error('CSV có ID trùng');seen.add(r.topic_id);const t=topics.find(t=>t.id===r.topic_id);for(const k of ['fb','tt']){const patch=brandPatch(t,r,k);if(patch)items.push({r,k,patch,old:JSON.stringify(t[k])});else skipped++;}}brandPlan={m,uid,items,skipped};$('brandReport').textContent='Facebook: '+items.filter(x=>x.k==='fb').length+' · TikTok: '+items.filter(x=>x.k==='tt').length+' · Bỏ qua: '+skipped+'\n'+items.map(x=>x.k==='fb'?'FB · '+x.r.topic_title+' → '+x.r.facebook_hashtags:'TT · '+x.r.tiktok_title+' '+x.r.tiktok_hashtags+' ('+(x.r.tiktok_title+'\n\n'+x.r.tiktok_hashtags).length+'/90)').join('\n');$('brandApply').hidden=!items.length;}catch(e){$('brandReport').textContent=e.message}};
-$('brandApply').onclick=async()=>{if(busy||!brandPlan)return;const {m,uid,items,skipped}=brandPlan;if(!confirm('Cập nhật '+items.length+' bài? Hãy lưu các chỉnh sửa đang mở trước khi tiếp tục.'))return;busy=true;$('brandApply').hidden=true;brandPlan=null;let done=0,miss=skipped;const check=()=>{if(mode!==m||authUser?.uid!==uid||(m==='cloud'&&!cloudEnabled()))throw Error('Tài khoản đã thay đổi')};const eligible=(t,x)=>t&&JSON.stringify(t[x.k])===x.old&&brandPatch(t,x.r,x.k);try{check();const next=m==='local'?JSON.parse(JSON.stringify(topics)):null;for(const x of items){check();if(m==='cloud'){const ref=cloud.doc(cloud.db,'v4_users',uid,'topics',x.r.topic_id);const ok=await cloud.runTransaction(cloud.db,async tx=>{const t=(await tx.get(ref)).data();const patch=eligible(t,x);if(!patch)return false;tx.update(ref,patch);return true});if(ok)done++;else miss++;}else{const t=next.find(t=>t.id===x.r.topic_id),patch=eligible(t,x);if(!patch){miss++;continue;}for(const [key,val] of Object.entries(patch)){const [k,field]=key.split('.');t[k][field]=val;}done++;}}if(next){localStorage.setItem(KEY,JSON.stringify(next));topics=next;}$('brandReport').textContent='Đã cập nhật '+done+' bài; bỏ qua '+miss+'. Không tạo bài mới. Hãy mở lại chủ đề để xem dữ liệu mới.';if(selected){const t=topics.find(t=>t.id===selected);if(t){fillPlatform('fb',t.fb);fillPlatform('tt',t.tt);}}}catch(e){$('brandReport').textContent='Lỗi: '+e.message+'; đã lưu '+(m==='cloud'?done:0)+' bài. Có thể nhập lại CSV.';}finally{busy=false;render();}};
+$('brandFile').onchange=async()=>{const f=$('brandFile').files[0];$('brandFile').value='';brandPlan=null;$('brandApply').hidden=true;if(!f||busy)return;try{if(f.size>2e6)throw Error('CSV quá 2MB');const m=mode,uid=authUser?.uid;if(m==='cloud'&&!cloudEnabled())throw Error('Chưa tải dữ liệu cloud');const rows=parseCSV(await f.text()),head=(rows.shift()||[]).map(x=>x.trim());if(mode!==m||authUser?.uid!==uid)throw Error('Tài khoản đã thay đổi');const required=['topic_id','topic_title','fb_publish_at','tt_publish_at','facebook_hashtags','tiktok_title','tiktok_hashtags'];if(!required.every(x=>head.includes(x)))throw Error('Chọn CSV cập nhật V4.7.1');const seen=new Set(),items=[];let skipped=0;for(const row of rows){if(!row.some(Boolean))continue;const r=Object.fromEntries(head.map((h,i)=>[h,row[i]||'']));if(seen.has(r.topic_id))throw Error('CSV có ID trùng');seen.add(r.topic_id);const t=topics.find(t=>t.id===r.topic_id);for(const k of ['fb','tt']){const patch=brandPatch(t,r,k);if(patch)items.push({r,k,patch,old:null});else skipped++;}}brandPlan={m,uid,items,skipped};$('brandReport').textContent='Facebook: '+items.filter(x=>x.k==='fb').length+' · TikTok: '+items.filter(x=>x.k==='tt').length+' · Bỏ qua: '+skipped+'\n'+items.map(x=>x.k==='fb'?'FB · '+x.r.topic_title+' → '+x.r.facebook_hashtags:'TT · '+x.r.tiktok_title+' '+x.r.tiktok_hashtags+' ('+(x.r.tiktok_title+'\n\n'+x.r.tiktok_hashtags).length+'/90)').join('\n');$('brandApply').hidden=!items.length;}catch(e){$('brandReport').textContent=e.message}};
+function brandReason(t,x){
+ if(!t)return 'Không tìm thấy chủ đề';
+ if(t.title!==x.r.topic_title)return 'Tên chủ đề đã thay đổi';
+ if(!['pending','approved'].includes(t[x.k]?.status))return 'Trạng thái không cho phép cập nhật';
+ if(t[x.k].at!==x.r[x.k+'_publish_at'])return 'Lịch đăng đã thay đổi';
+ return 'Đã đủ dữ liệu hoặc dữ liệu không hợp lệ';
+}
+$('brandApply').onclick=async()=>{
+ if(busy||!brandPlan)return;
+ const {m,uid,items,skipped}=brandPlan;
+ if(!confirm('Cập nhật '+items.length+' bài? Hãy lưu các chỉnh sửa đang mở trước khi tiếp tục.'))return;
+ busy=true;brandPlan=null;
+ const btn=$('brandApply'),report=$('brandReport'),bar=$('brandProgress'),status=$('brandProgressText');
+ const locked=[...document.querySelectorAll('header button, main button, nav button, #desktopNew')].filter(b=>!b.disabled);
+ locked.forEach(b=>b.disabled=true);btn.hidden=false;btn.textContent='Đang cập nhật…';
+ const guard=e=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',guard);
+ let done=0,miss=0,failed=0,processed=0;const details=[];
+ const check=()=>{if(mode!==m||authUser?.uid!==uid||(m==='cloud'&&!cloudEnabled()))throw Error('Tài khoản đã thay đổi hoặc mất kết nối');};
+ const progress=()=>{bar.hidden=false;bar.max=items.length;bar.value=processed;status.textContent='Đang cập nhật '+processed+'/'+items.length+' ('+Math.round(processed/items.length*100)+'%) · Thành công: '+done+' · Bỏ qua: '+miss+' · Lỗi: '+failed+' — Không đóng hoặc tải lại trang.';};
+ const apply=(t,patch)=>{for(const [key,val] of Object.entries(patch)){const [k,field]=key.split('.');t[k][field]=val;}};
+ report.textContent='Đang xử lý dữ liệu…';progress();
+ try{
+  await new Promise(r=>setTimeout(r,50));
+  for(const x of items){
+   check();
+   try{
+    let result;
+    if(m==='cloud'){
+     const ref=cloud.doc(cloud.db,'v4_users',uid,'topics',x.r.topic_id);
+     result=await cloud.runTransaction(cloud.db,async tx=>{const t=(await tx.get(ref)).data();const patch=brandPatch(t,x.r,x.k);if(!patch)return {reason:brandReason(t,x)};tx.update(ref,patch);return {patch};});
+    }else{
+     const next=JSON.parse(JSON.stringify(topics)),t=next.find(t=>t.id===x.r.topic_id),patch=brandPatch(t,x.r,x.k);
+     if(patch){apply(t,patch);localStorage.setItem(KEY,JSON.stringify(next));topics=next;result={patch};}else result={reason:brandReason(t,x)};
+    }
+    if(result.patch){done++;if(m==='cloud'&&mode===m&&authUser?.uid===uid){const t=topics.find(t=>t.id===x.r.topic_id);if(t)apply(t,result.patch);}}
+    else{miss++;details.push(x.k.toUpperCase()+' · '+x.r.topic_title+' — '+result.reason);}
+   }catch(e){failed++;details.push(x.k.toUpperCase()+' · '+x.r.topic_title+' — Lỗi: '+e.message);}
+   processed++;progress();await new Promise(r=>setTimeout(r,0));
+  }
+ }catch(e){details.push('Dừng: '+e.message);}
+ finally{
+  const remaining=items.length-processed;
+  status.textContent=(failed||remaining||miss?'Kết thúc có mục cần kiểm tra':'Hoàn tất')+' · '+processed+'/'+items.length+' bài đã xử lý';
+  report.textContent='Đã cập nhật '+done+' bài; bỏ qua khi xem trước '+skipped+'; bỏ qua khi lưu '+miss+'; lỗi '+failed+'; chưa xử lý '+remaining+'. Không tạo bài mới. Có thể nhập lại CSV.\n'+details.join('\n');
+  window.removeEventListener('beforeunload',guard);locked.forEach(b=>b.disabled=false);btn.hidden=true;btn.textContent='Xác nhận cập nhật';busy=false;render();
+  if(mode===m&&authUser?.uid===uid&&selected){const t=topics.find(t=>t.id===selected);if(t){fillPlatform('fb',t.fb);fillPlatform('tt',t.tt);}}
+  toast(status.textContent);
+ }
+};

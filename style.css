@@ -18,3 +18,5 @@
 
 /* V4.6.1 */
 .pending-stat{cursor:pointer;border:1px solid #79a99d}.pending-stat:hover,.pending-stat:focus-visible{outline:2px solid #176b60}.pending-entry{display:grid;gap:8px}.pending-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0}.pending-entry summary{cursor:pointer;color:#176b60;font-weight:600}#pendingPanel{scroll-margin-top:12px}#csvDone{color:#193c34;border-top:1px solid #d4e1dc;padding-top:16px;margin-top:12px}#csvDoneCounts>div{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #d4e1dc}#csvFinish{margin-top:12px}@media(max-width:760px){body:not([data-tab=home]) #pendingPanel{display:none}}
+
+.brand-progress-wrap{flex-basis:100%;width:100%}.brand-progress-wrap progress{width:100%;height:18px;accent-color:#82d8b9}.brand-progress-wrap [hidden]{display:none}#brandProgressText{font-weight:600;white-space:normal}#brandReport{flex-basis:100%;width:100%;margin:0}#brandReport:empty,.brand-progress-wrap:has(#brandProgress[hidden]):has(#brandProgressText:empty){display:none}
